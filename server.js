@@ -7,552 +7,346 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 const API_BASE =
-'https://worldecletix.onrender.com/api';
+  'https://worldecletix.onrender.com/api';
 
 const API_JOGOS =
-"${API_BASE}/multicanais";
+  `${API_BASE}/multicanais`;
 
 const API_ASSISTA =
-"${API_BASE}/assista";
+  `${API_BASE}/assista?url=`;
 
 /* =========================================================
-MANIFEST
+   MANIFEST
 ========================================================= */
 
 const manifest = {
-id: 'com.worldecletix.nuvio',
-version: '1.0.0',
+  id: 'com.worldecletix.nuvio',
+  version: '1.0.0',
 
-name: 'WorldEcletix',
+  name: 'WorldEcletix',
 
-description:
-'Eventos esportivos ao vivo.',
+  description:
+    'Eventos esportivos ao vivo.',
 
-logo:
-'https://n.uguu.se/CrMdZEwf.jpg',
+  logo:
+    'https://n.uguu.se/CrMdZEwf.jpg',
 
-resources: [
-'catalog',
-'meta',
-'stream'
-],
+  resources: [
+    'catalog',
+    'meta',
+    'stream'
+  ],
 
-types: [
-'tv'
-],
+  types: [
+    'tv'
+  ],
 
-catalogs: [
-{
-type: 'tv',
-id: 'worldecletix-eventos',
-name: 'Eventos ao Vivo',
-extra: [
-{
-name: 'search',
-isRequired: false
-}
-]
-}
-],
+  catalogs: [
+    {
+      type: 'tv',
+      id: 'worldecletix-eventos',
+      name: 'Eventos ao Vivo',
+      extra: [
+        {
+          name: 'search',
+          isRequired: false
+        }
+      ]
+    }
+  ],
 
-idPrefixes: [
-'world:'
-],
+  idPrefixes: [
+    'world:'
+  ],
 
-behaviorHints: {
-configurable: false,
-p2pNotSupported: true
-}
+  behaviorHints: {
+    configurable: false,
+    p2pNotSupported: true
+  }
 };
 
 const builder = new addonBuilder(manifest);
 
 /* =========================================================
-CACHE
+   CACHE
 ========================================================= */
 
 let jogosCache = [];
 let cacheTime = 0;
 
 async function obterJogos() {
-const agora = Date.now();
+  const agora = Date.now();
 
-if (
-jogosCache.length > 0 &&
-agora - cacheTime < 15000
-) {
-return jogosCache;
-}
+  if (
+    jogosCache.length > 0 &&
+    agora - cacheTime < 15000
+  ) {
+    return jogosCache;
+  }
 
-try {
-const response = await axios.get(
-API_JOGOS,
-{
-timeout: 20000
-}
-);
+  try {
+    const response = await axios.get(
+      API_JOGOS,
+      {
+        timeout: 20000
+      }
+    );
 
-if (
-  !response.data ||
-  !Array.isArray(response.data.jogos)
-) {
-  throw new Error(
-    'Formato inválido da API /multicanais'
-  );
-}
+    if (
+      !response.data ||
+      !Array.isArray(response.data.jogos)
+    ) {
+      throw new Error(
+        'Formato inválido da API /multicanais'
+      );
+    }
 
-jogosCache = response.data.jogos;
-cacheTime = agora;
+    jogosCache = response.data.jogos;
+    cacheTime = agora;
 
-console.log(
-  `📡 ${jogosCache.length} eventos carregados`
-);
+    console.log(
+      `📡 ${jogosCache.length} eventos carregados`
+    );
 
-return jogosCache;
+    return jogosCache;
 
-} catch (error) {
-console.error(
-'❌ Erro /multicanais:',
-error.message
-);
+  } catch (error) {
+    console.error(
+      '❌ Erro /multicanais:',
+      error.message
+    );
 
-return jogosCache;
-
-}
+    return jogosCache;
+  }
 }
 
 /* =========================================================
-ID
+   ID
 ========================================================= */
 
 function criarId(jogo) {
-return "world:${jogo.id}";
+  return `world:${jogo.id}`;
 }
 
 function pegarId(id) {
-return String(id)
-.replace(/^world:/, '');
+  return String(id)
+    .replace(/^world:/, '');
 }
 
 /* =========================================================
-CATALOG
+   CATALOG
 ========================================================= */
 
 builder.defineCatalogHandler(async args => {
-const jogos = await obterJogos();
+  const jogos = await obterJogos();
 
-let lista = jogos.filter(
-jogo => jogo.ativo !== false
-);
+  let lista = jogos.filter(
+    jogo => jogo.ativo !== false
+  );
 
-/*
+  /*
+   * Pesquisa do Stremio/Nuvio
+   */
+  if (args.extra?.search) {
+    const busca =
+      args.extra.search
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
 
-* Pesquisa do Stremio/Nuvio
-  */
+    lista = lista.filter(jogo => {
+      const texto = [
+        jogo.titulo,
+        jogo.time1,
+        jogo.time2,
+        jogo.campeonato
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
 
-if (args.extra?.search) {
-const busca =
-args.extra.search
-.toLowerCase()
-.normalize('NFD')
-.replace(/[\u0300-\u036f]/g, '');
+      return texto.includes(busca);
+    });
+  }
 
-lista = lista.filter(jogo => {
-  const texto = [
-    jogo.titulo,
-    jogo.time1,
-    jogo.time2,
-    jogo.campeonato
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
+  const metas = lista.map(jogo => ({
+    id: criarId(jogo),
 
-  return texto.includes(busca);
-});
+    type: 'tv',
 
-}
+    name:
+      jogo.titulo ||
+      `${jogo.time1} x ${jogo.time2}`,
 
-const metas = lista.map(jogo => ({
-id: criarId(jogo),
+    poster:
+      jogo.time1_foto || undefined,
 
-type: 'tv',
+    posterShape: 'square',
 
-name:
-  jogo.titulo ||
-  `${jogo.time1} x ${jogo.time2}`,
+    description: [
+      jogo.campeonato,
+      jogo.data,
+      jogo.horario_inicio
+        ? `🕐 ${jogo.horario_inicio}`
+        : ''
+    ]
+      .filter(Boolean)
+      .join(' • '),
 
-poster:
-  jogo.time1_foto || undefined,
+    releaseInfo:
+      jogo.data || undefined
+  }));
 
-posterShape: 'square',
-
-description: [
-  jogo.campeonato,
-  jogo.data,
-  jogo.horario_inicio
-    ? `🕐 ${jogo.horario_inicio}`
-    : ''
-]
-  .filter(Boolean)
-  .join(' • '),
-
-releaseInfo:
-  jogo.data || undefined
-
-}));
-
-return {
-metas
-};
+  return {
+    metas
+  };
 });
 
 /* =========================================================
-META
+   META
 ========================================================= */
 
 builder.defineMetaHandler(async args => {
-const jogos = await obterJogos();
+  const jogos = await obterJogos();
 
-const id = pegarId(args.id);
+  const id = pegarId(args.id);
 
-const jogo = jogos.find(
-item => String(item.id) === id
-);
+  const jogo = jogos.find(
+    item => String(item.id) === id
+  );
 
-if (!jogo) {
-return {
-meta: null
-};
-}
+  if (!jogo) {
+    return {
+      meta: null
+    };
+  }
 
-return {
-meta: {
-id: criarId(jogo),
+  return {
+    meta: {
+      id: criarId(jogo),
 
-  type: 'tv',
+      type: 'tv',
 
-  name:
-    jogo.titulo ||
-    `${jogo.time1} x ${jogo.time2}`,
+      name:
+        jogo.titulo ||
+        `${jogo.time1} x ${jogo.time2}`,
 
-  poster:
-    jogo.time1_foto || undefined,
+      poster:
+        jogo.time1_foto || undefined,
 
-  background:
-    jogo.time1_foto || undefined,
+      background:
+        jogo.time1_foto || undefined,
 
-  description: [
-    jogo.campeonato,
-    `📅 ${jogo.data}`,
-    `🕐 ${jogo.horario_inicio || ''}`,
-    jogo.transmissoes?.length
-      ? `📺 ${jogo.transmissoes.join(', ')}`
-      : ''
-  ]
-    .filter(Boolean)
-    .join('\n')
-}
-
-};
+      description: [
+        jogo.campeonato,
+        `📅 ${jogo.data}`,
+        `🕐 ${jogo.horario_inicio || ''}`,
+        jogo.transmissoes?.length
+          ? `📺 ${jogo.transmissoes.join(', ')}`
+          : ''
+      ]
+        .filter(Boolean)
+        .join('\n')
+    }
+  };
 });
 
 /* =========================================================
-STREAM
+   STREAM
 ========================================================= */
 
 builder.defineStreamHandler(async args => {
-try {
-const jogos = await obterJogos();
+  const jogos = await obterJogos();
 
-const id = pegarId(args.id);
+  const id = pegarId(args.id);
 
-const jogo = jogos.find(
-  item => String(item.id) === id
-);
-
-if (!jogo) {
-  console.log(
-    '❌ Jogo não encontrado:',
-    id
+  const jogo = jogos.find(
+    item => String(item.id) === id
   );
 
-  return {
-    streams: []
-  };
-}
-
-if (!jogo.link) {
-  console.log(
-    '❌ Jogo sem link:',
-    jogo.titulo
-  );
-
-  return {
-    streams: []
-  };
-}
-
-console.log('');
-console.log(
-  '======================================'
-);
-console.log(
-  '🔎 BUSCANDO PLAYERS'
-);
-console.log(
-  '======================================'
-);
-console.log(
-  `🎮 ${jogo.titulo}`
-);
-console.log(
-  `🔗 ${jogo.link}`
-);
-
-/*
- * /multicanais fornece apenas os IDs dos players.
- *
- * Exemplo:
- *
- * players: [
- *   "6876b6fb7756b",
- *   "6860ccaec07de"
- * ]
- *
- * Por isso consultamos /api/assista.
- */
-
-const response = await axios.get(
-  API_ASSISTA,
-  {
-    params: {
-      url: jogo.link
-    },
-
-    timeout: 30000
-  }
-);
-
-const dados = response.data;
-
-if (
-  !dados ||
-  dados.success !== true
-) {
-  console.log(
-    '❌ /assista retornou success=false'
-  );
-
-  return {
-    streams: []
-  };
-}
-
-if (
-  !Array.isArray(dados.players)
-) {
-  console.log(
-    '❌ /assista não possui players[]'
-  );
-
-  return {
-    streams: []
-  };
-}
-
-console.log(
-  `✅ ${dados.players.length} players encontrados`
-);
-
-dados.players.forEach(
-  (player, index) => {
-    console.log(
-      `${index + 1}. ${
-        player.nome || 'Player'
-      }`
-    );
-  }
-);
-
-/*
- * IMPORTANTE:
- *
- * Aqui temos os players completos.
- *
- * {
- *   id: "...",
- *   nome: "...",
- *   embed: "..."
- * }
- *
- * Para reprodução pelo addon, a URL precisa
- * ser uma fonte cuja distribuição seja autorizada.
- */
-
-const streams = [];
-
-for (
-  const player of dados.players
-) {
-
-  if (!player) {
-    continue;
+  if (!jogo) {
+    return {
+      streams: []
+    };
   }
 
-  const nome =
-    player.nome ||
-    'Player';
+  const players = Array.isArray(jogo.players)
+    ? jogo.players
+    : [];
 
-  /*
-   * O seu endpoint pode fornecer uma URL
-   * autorizada através de "url".
-   */
-
-  if (
-    typeof player.url === 'string' &&
-    player.url.length > 0
-  ) {
-
-    streams.push({
-      name: nome,
+  const streams = players
+    .filter(player =>
+      player &&
+      typeof player.embed === 'string' &&
+      player.embed.startsWith('http')
+    )
+    .map(player => ({
+      name: player.nome || 'Stream',
 
       title:
-        `${nome}\n` +
-        `${dados.time1 || jogo.time1 || ''} x ` +
-        `${dados.time2 || jogo.time2 || ''}`,
+        `${player.nome || 'Stream'}\n` +
+        `${jogo.time1 || ''} x ${jogo.time2 || ''}`,
 
-      url: player.url,
-
-      behaviorHints: {
-        notWebReady: false
+      widgetPlayer: {
+        type: 'webview',
+        url: player.embed
       }
-    });
-  }
-}
+    }));
 
-console.log(
-  `📺 ${streams.length} streams autorizados`
-);
+  console.log(
+    `🌐 ${streams.length} players encontrados`
+  );
 
-console.log(
-  '======================================'
-);
-
-return {
-  streams
-};
-
-} catch (error) {
-
-console.error('');
-console.error(
-  '❌ ERRO NO STREAM HANDLER'
-);
-
-console.error(
-  error.response?.data ||
-  error.message
-);
-
-console.error('');
-
-return {
-  streams: []
-};
-
-}
+  return {
+    streams
+  };
 });
 
 /* =========================================================
-EXPRESS
+   EXPRESS
 ========================================================= */
 
 app.use(
-'/',
-getRouter(builder.getInterface())
+  '/',
+  getRouter(builder.getInterface())
 );
 
 /* =========================================================
-STATUS
+   STATUS
 ========================================================= */
 
 app.get('/status', async (req, res) => {
+  const jogos = await obterJogos();
 
-try {
-
-const jogos =
-  await obterJogos();
-
-res.json({
-  success: true,
-
-  addon: 'WorldEcletix',
-
-  version:
-    manifest.version,
-
-  eventos:
-    jogos.length,
-
-  api: {
-    jogos: API_JOGOS,
-    assista: API_ASSISTA
-  },
-
-  manifest:
-    '/manifest.json'
-});
-
-} catch (error) {
-
-res.status(500).json({
-  success: false,
-  error: error.message
-});
-
-}
+  res.json({
+    success: true,
+    addon: 'WorldEcletix',
+    version: manifest.version,
+    eventos: jogos.length,
+    manifest:
+      `/manifest.json`
+  });
 });
 
 /* =========================================================
-START
+   START
 ========================================================= */
 
-app.listen(
-PORT,
-() => {
-
-console.log('');
-
-console.log(
-  '======================================'
-);
-
-console.log(
-  '🚀 WORLD ECLETIX ADDON'
-);
-
-console.log(
-  '======================================'
-);
-
-console.log(
-  `📡 Porta: ${PORT}`
-);
-
-console.log(
-  `📋 Manifest: http://localhost:${PORT}/manifest.json`
-);
-
-console.log(
-  `❤️ Status: http://localhost:${PORT}/status`
-);
-
-console.log(
-  '======================================'
-);
-
-}
-);
+app.listen(PORT, () => {
+  console.log('');
+  console.log('======================================');
+  console.log('🚀 WORLD ECLETIX ADDON');
+  console.log('======================================');
+  console.log(
+    `📡 Porta: ${PORT}`
+  );
+  console.log(
+    `📋 Manifest: http://localhost:${PORT}/manifest.json`
+  );
+  console.log(
+    `❤️ Status: http://localhost:${PORT}/status`
+  );
+  console.log('======================================');
+});
