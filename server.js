@@ -253,114 +253,20 @@ builder.defineMetaHandler(async args => {
   };
 });
 
-/* =========================================================
-   STREAM
-========================================================= */
-
-builder.defineStreamHandler(async args => {
-  const jogos = await obterJogos();
-
-  const id = pegarId(args.id);
-
-  const jogo = jogos.find(
-    item => String(item.id) === id
-  );
-
-  if (!jogo) {
-    console.log(`❌ Jogo não encontrado: ${id}`);
-
-    return {
-      streams: []
-    };
-  }
-
-  if (!jogo.link) {
-    console.log(
-      `❌ Jogo ${id} não possui link`
-    );
-
-    return {
-      streams: []
-    };
-  }
-
-  try {
-
-    console.log(
-      `🔎 Buscando players: ${jogo.link}`
-    );
-
-    const urlApi =
-      API_ASSISTA +
-      encodeURIComponent(jogo.link);
-
-    const response = await axios.get(
-      urlApi,
+   
+builder.defineStreamHandler(async () => {
+  return {
+    streams: [
       {
-        timeout: 30000
-      }
-    );
-
-    const data = response.data;
-
-    console.log(
-      '📥 Resposta /assista recebida'
-    );
-
-    /*
-     * A API /assista retorna os players
-     */
-    const players =
-      Array.isArray(data.players)
-        ? data.players
-        : [];
-
-    console.log(
-      `📺 ${players.length} players encontrados`
-    );
-
-    const streams = players
-      .filter(player =>
-        player &&
-        typeof player.embed === 'string' &&
-        player.embed.startsWith('http')
-      )
-      .map(player => ({
-        name:
-          player.nome ||
-          'Stream',
-
-        title:
-          `${player.nome || 'Stream'}\n` +
-          `${jogo.time1 || ''} x ` +
-          `${jogo.time2 || ''}`,
-
-        url: player.embed,
-
+        name: 'ESPN4',
+        title: 'Teste de stream M3U8',
+        url: 'https://za260pb3a281.ssl-images-cdn.site/live/secure/Covf9uiYEM8lLSJMR-aLu9KjyWyYXM0iIHZonlIeWDc/1789380663/ef8b314bf3c75ac5/espn4/index.m3u8',
         behaviorHints: {
-          notWebReady: true
+          notWebReady: false
         }
-      }));
-
-    console.log(
-      `✅ ${streams.length} streams enviados ao Stremio`
-    );
-
-    return {
-      streams
-    };
-
-  } catch (error) {
-
-    console.error(
-      '❌ Erro ao buscar /assista:',
-      error.message
-    );
-
-    return {
-      streams: []
-    };
-  }
+      }
+    ]
+  };
 });
 /* =========================================================
    EXPRESS
