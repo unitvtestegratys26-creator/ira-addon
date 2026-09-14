@@ -267,60 +267,101 @@ builder.defineStreamHandler(async args => {
   );
 
   if (!jogo) {
-    console.log('❌ Jogo não encontrado:', id);
+    console.log(`❌ Jogo não encontrado: ${id}`);
 
     return {
       streams: []
     };
   }
 
-  const players = Array.isArray(jogo.players)
-    ? jogo.players
-    : [];
+  if (!jogo.link) {
+    console.log(
+      `❌ Jogo ${id} não possui link`
+    );
 
-  const streams = players
-    .filter(player =>
-      player &&
-      typeof player.embed === 'string' &&
-      player.embed.startsWith('http')
-    )
-    .map(player => ({
-      name: player.nome || 'Stream',
+    return {
+      streams: []
+    };
+  }
 
-      title:
-        `${player.nome || 'Stream'}\n` +
-        `${jogo.time1 || ''} x ${jogo.time2 || ''}`,
+  try {
 
-      /*
-       * URL da página que contém o botão Play.
-       *
-       * Precisamos de um campo de stream para o cliente
-       * aceitar esse objeto.
-       */
-      url: player.embed,
+    console.log(
+      `🔎 Buscando players: ${jogo.link}`
+    );
 
-      behaviorHints: {
-        notWebReady: true
-      },
+    const urlApi =
+      API_ASSISTA +
+      encodeURIComponent(jogo.link);
 
-      widgetPlayer: player.embed,
+    const response = await axios.get(
+      urlApi,
+      {
+        timeout: 30000
+      }
+    );
 
-      widgetPlayerStates: [
-        'loading',
-        'buffering',
-        'replaceplayer'
-      ]
-    }));
+    const data = response.data;
 
-  console.log(
-    `📺 ${streams.length} streams encontrados`
-  );
+    console.log(
+      '📥 Resposta /assista recebida'
+    );
 
-  return {
-    streams
-  };
+    /*
+     * A API /assista retorna os players
+     */
+    const players =
+      Array.isArray(data.players)
+        ? data.players
+        : [];
+
+    console.log(
+      `📺 ${players.length} players encontrados`
+    );
+
+    const streams = players
+      .filter(player =>
+        player &&
+        typeof player.embed === 'string' &&
+        player.embed.startsWith('http')
+      )
+      .map(player => ({
+        name:
+          player.nome ||
+          'Stream',
+
+        title:
+          `${player.nome || 'Stream'}\n` +
+          `${jogo.time1 || ''} x ` +
+          `${jogo.time2 || ''}`,
+
+        url: player.embed,
+
+        behaviorHints: {
+          notWebReady: true
+        }
+      }));
+
+    console.log(
+      `✅ ${streams.length} streams enviados ao Stremio`
+    );
+
+    return {
+      streams
+    };
+
+  } catch (error) {
+
+    console.error(
+      '❌ Erro ao buscar /assista:',
+      error.message
+    );
+
+    return {
+      streams: []
+    };
+  }
 });
-
 /* =========================================================
    EXPRESS
 ========================================================= */
