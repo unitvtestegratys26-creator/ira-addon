@@ -267,6 +267,7 @@ builder.defineStreamHandler(async args => {
   );
 
   if (!jogo) {
+    console.log(`❌ Jogo não encontrado: ${id}`);
     return {
       streams: []
     };
@@ -289,14 +290,19 @@ builder.defineStreamHandler(async args => {
         `${player.nome || 'Stream'}\n` +
         `${jogo.time1 || ''} x ${jogo.time2 || ''}`,
 
-      widgetPlayer: {
-        type: 'webview',
-        url: player.embed
-      }
+      // A página HTML do player
+      widgetPlayer: player.embed,
+
+      // Faz o widget substituir o player inteiro
+      widgetPlayerStates: [
+        'loading',
+        'buffering',
+        'replaceplayer'
+      ]
     }));
 
   console.log(
-    `🌐 ${streams.length} players encontrados`
+    `📺 ${streams.length} players encontrados para ${jogo.titulo}`
   );
 
   return {
