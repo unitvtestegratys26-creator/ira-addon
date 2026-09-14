@@ -20,10 +20,10 @@ MANIFEST
 ========================================================= */
 
 const manifest = {
-id: 'com.iracemaflix.nuvio',
+id: 'com.worldecletix.nuvio',
 version: '1.0.0',
 
-name: 'iracema',
+name: 'WorldEcletix',
 
 description:
 'Eventos esportivos ao vivo.',
@@ -44,7 +44,7 @@ types: [
 catalogs: [
 {
 type: 'tv',
-id: 'iracema-eventos',
+id: 'worldecletix-eventos',
 name: 'Eventos ao Vivo',
 extra: [
 {
@@ -122,92 +122,6 @@ return jogosCache;
 }
 
 /* =========================================================
-BUSCAR PLAYERS DA API /ASSISTA
-========================================================= */
-
-async function obterPlayers(jogo) {
-if (!jogo || !jogo.link) {
-console.log(
-'⚠️ Evento sem link:',
-jogo?.titulo || jogo?.id
-);
-
-return null;
-
-}
-
-try {
-console.log('');
-console.log('======================================');
-console.log('🔎 BUSCANDO PLAYERS');
-console.log('======================================');
-console.log(
-"🎮 Evento: ${jogo.titulo || jogo.id}"
-);
-console.log(
-"🔗 Link: ${jogo.link}"
-);
-
-const response = await axios.get(
-  API_ASSISTA,
-  {
-    params: {
-      url: jogo.link
-    },
-    timeout: 30000
-  }
-);
-
-const dados = response.data;
-
-if (
-  !dados ||
-  dados.success !== true
-) {
-  console.log(
-    '⚠️ /assista retornou sucesso=false'
-  );
-
-  return null;
-}
-
-if (!Array.isArray(dados.players)) {
-  console.log(
-    '⚠️ /assista não retornou players[]'
-  );
-
-  return null;
-}
-
-console.log(
-  `✅ ${dados.players.length} players encontrados`
-);
-
-dados.players.forEach((player, index) => {
-  console.log(
-    `${index + 1}. ${player.nome || 'Player'}`
-  );
-});
-
-console.log('======================================');
-console.log('');
-
-return dados;
-
-} catch (error) {
-console.error('');
-console.error(
-'❌ Erro /assista:',
-error.response?.data || error.message
-);
-console.error('');
-
-return null;
-
-}
-}
-
-/* =========================================================
 ID
 ========================================================= */
 
@@ -230,6 +144,11 @@ const jogos = await obterJogos();
 let lista = jogos.filter(
 jogo => jogo.ativo !== false
 );
+
+/*
+
+* Pesquisa do Stremio/Nuvio
+  */
 
 if (args.extra?.search) {
 const busca =
@@ -356,7 +275,7 @@ const jogo = jogos.find(
 
 if (!jogo) {
   console.log(
-    '⚠️ Evento não encontrado:',
+    '❌ Jogo não encontrado:',
     id
   );
 
@@ -365,50 +284,119 @@ if (!jogo) {
   };
 }
 
-/*
- * IMPORTANTE:
- *
- * /multicanais retorna:
- *
- * players: [
- *   "6876b6fb7756b",
- *   "6860ccaec07de",
- *   ...
- * ]
- *
- * Portanto não podemos procurar "embed" aqui.
- *
- * Primeiro consultamos /api/assista usando jogo.link.
- */
+if (!jogo.link) {
+  console.log(
+    '❌ Jogo sem link:',
+    jogo.titulo
+  );
 
-const dados = await obterPlayers(jogo);
-
-if (!dados) {
   return {
     streams: []
   };
 }
 
+console.log('');
+console.log(
+  '======================================'
+);
+console.log(
+  '🔎 BUSCANDO PLAYERS'
+);
+console.log(
+  '======================================'
+);
+console.log(
+  `🎮 ${jogo.titulo}`
+);
+console.log(
+  `🔗 ${jogo.link}`
+);
+
 /*
- * Neste ponto:
+ * /multicanais fornece apenas os IDs dos players.
  *
- * dados.players =
+ * Exemplo:
  *
- * [
- *   {
- *     id: "...",
- *     nome: "...",
- *     embed: "..."
- *   }
+ * players: [
+ *   "6876b6fb7756b",
+ *   "6860ccaec07de"
  * ]
  *
- * Para uma fonte de streaming autorizada, transforme
- * cada player em um objeto Stream do Stremio.
+ * Por isso consultamos /api/assista.
+ */
+
+const response = await axios.get(
+  API_ASSISTA,
+  {
+    params: {
+      url: jogo.link
+    },
+
+    timeout: 30000
+  }
+);
+
+const dados = response.data;
+
+if (
+  !dados ||
+  dados.success !== true
+) {
+  console.log(
+    '❌ /assista retornou success=false'
+  );
+
+  return {
+    streams: []
+  };
+}
+
+if (
+  !Array.isArray(dados.players)
+) {
+  console.log(
+    '❌ /assista não possui players[]'
+  );
+
+  return {
+    streams: []
+  };
+}
+
+console.log(
+  `✅ ${dados.players.length} players encontrados`
+);
+
+dados.players.forEach(
+  (player, index) => {
+    console.log(
+      `${index + 1}. ${
+        player.nome || 'Player'
+      }`
+    );
+  }
+);
+
+/*
+ * IMPORTANTE:
+ *
+ * Aqui temos os players completos.
+ *
+ * {
+ *   id: "...",
+ *   nome: "...",
+ *   embed: "..."
+ * }
+ *
+ * Para reprodução pelo addon, a URL precisa
+ * ser uma fonte cuja distribuição seja autorizada.
  */
 
 const streams = [];
 
-for (const player of dados.players) {
+for (
+  const player of dados.players
+) {
 
   if (!player) {
     continue;
@@ -419,22 +407,15 @@ for (const player of dados.players) {
     'Player';
 
   /*
-   * Use aqui somente uma URL cuja distribuição
-   * você esteja autorizado a realizar.
-   *
-   * Exemplo:
-   *
-   * const streamUrl = player.url;
-   *
-   * Não usamos automaticamente "player.embed"
-   * porque os embeds retornados pelo exemplo são
-   * URLs de terceiros.
+   * O seu endpoint pode fornecer uma URL
+   * autorizada através de "url".
    */
 
   if (
     typeof player.url === 'string' &&
     player.url.length > 0
   ) {
+
     streams.push({
       name: nome,
 
@@ -453,7 +434,11 @@ for (const player of dados.players) {
 }
 
 console.log(
-  `📺 Streams autorizados encontrados: ${streams.length}`
+  `📺 ${streams.length} streams autorizados`
+);
+
+console.log(
+  '======================================'
 );
 
 return {
@@ -462,11 +447,17 @@ return {
 
 } catch (error) {
 
+console.error('');
 console.error(
-  '❌ Erro no Stream Handler:',
+  '❌ ERRO NO STREAM HANDLER'
+);
+
+console.error(
   error.response?.data ||
   error.message
 );
+
+console.error('');
 
 return {
   streams: []
@@ -489,17 +480,22 @@ STATUS
 ========================================================= */
 
 app.get('/status', async (req, res) => {
+
 try {
-const jogos = await obterJogos();
+
+const jogos =
+  await obterJogos();
 
 res.json({
   success: true,
 
   addon: 'WorldEcletix',
 
-  version: manifest.version,
+  version:
+    manifest.version,
 
-  eventos: jogos.length,
+  eventos:
+    jogos.length,
 
   api: {
     jogos: API_JOGOS,
@@ -524,36 +520,39 @@ res.status(500).json({
 START
 ========================================================= */
 
-app.listen(PORT, () => {
+app.listen(
+PORT,
+() => {
 
 console.log('');
 
 console.log(
-'======================================'
+  '======================================'
 );
 
 console.log(
-'🚀 WORLD ECLETIX ADDON'
+  '🚀 WORLD ECLETIX ADDON'
 );
 
 console.log(
-'======================================'
+  '======================================'
 );
 
 console.log(
-"📡 Porta: ${PORT}"
+  `📡 Porta: ${PORT}`
 );
 
 console.log(
-"📋 Manifest: http://localhost:${PORT}/manifest.json"
+  `📋 Manifest: http://localhost:${PORT}/manifest.json`
 );
 
 console.log(
-"❤️ Status: http://localhost:${PORT}/status"
+  `❤️ Status: http://localhost:${PORT}/status`
 );
 
 console.log(
-'======================================'
+  '======================================'
 );
 
-});
+}
+);
