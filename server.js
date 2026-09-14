@@ -267,7 +267,8 @@ builder.defineStreamHandler(async args => {
   );
 
   if (!jogo) {
-    console.log(`❌ Jogo não encontrado: ${id}`);
+    console.log('❌ Jogo não encontrado:', id);
+
     return {
       streams: []
     };
@@ -290,10 +291,20 @@ builder.defineStreamHandler(async args => {
         `${player.nome || 'Stream'}\n` +
         `${jogo.time1 || ''} x ${jogo.time2 || ''}`,
 
-      // A página HTML do player
+      /*
+       * URL da página que contém o botão Play.
+       *
+       * Precisamos de um campo de stream para o cliente
+       * aceitar esse objeto.
+       */
+      url: player.embed,
+
+      behaviorHints: {
+        notWebReady: true
+      },
+
       widgetPlayer: player.embed,
 
-      // Faz o widget substituir o player inteiro
       widgetPlayerStates: [
         'loading',
         'buffering',
@@ -302,7 +313,7 @@ builder.defineStreamHandler(async args => {
     }));
 
   console.log(
-    `📺 ${streams.length} players encontrados para ${jogo.titulo}`
+    `📺 ${streams.length} streams encontrados`
   );
 
   return {
